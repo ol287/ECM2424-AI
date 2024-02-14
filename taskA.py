@@ -1,30 +1,46 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.callbacks import EarlyStopping
 
+# Load the dataset
 df = pd.read_excel("/content/CCD (1).xls")
 
-# Convert all columns to numeric, coercing errors to NaN
-X = df.iloc[:, :-1].apply(pd.to_numeric, errors='coerce')
-y = df.iloc[:, -1]
+# Assuming the last column is the target variable and the rest are features
+X = df.iloc[:, :-1]  # Features
+y = df.iloc[:, -1]   # Target variable
 
+# Convert all columns to numeric, coercing errors to NaN
+X = X.apply(pd.to_numeric, errors='coerce')
 # Fill NaN values with the median of each column, only for numeric columns
 X.fillna(X.median(numeric_only=True), inplace=True)
 
-# Ensure all columns in X are numeric now
-if not all(X.dtypes.apply(lambda x: np.issubdtype(x, np.number))):
+# Ensure all columns in X are numeric
+if not all(X.dtypes.apply(lambda dtype: np.issubdtype(dtype, np.number))):
     raise ValueError("Not all columns in the dataframe are numeric after conversion.")
 
 # Feature scaling
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
+X_scaled = X_scaled.astype(np.float32)  # Convert to float32
+
+# Convert any integer types in 'y' to strings for uniformity
+if not all(isinstance(item, str) for item in y):
+    y = y.astype(str)
+
+# Encode the categorical target variable y
+encoder = LabelEncoder()
+y_encoded = encoder.fit_transform(y)
 
 # Split the dataset
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
+
+# Convert y_encoded to float32 for TensorFlow, as TensorFlow expects float inputs for targets
+y_train = y_train.astype(np.float32)
+y_test = y_test.astype(np.float32)
 
 # Model design
 model = Sequential([
@@ -40,7 +56,7 @@ model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']
 early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
 # Model training
-history = model.fit(X_train, y_train, epochs=100, batch_size=32, validation_split=0.2, callbacks=[early_stopping])
+history = model.fit(X_train, y_train, epochs=100, validation_split=0.2, callbacks=[early_stopping], batch_size=32)
 
 # Evaluate the model
 test_loss, test_acc = model.evaluate(X_test, y_test)
