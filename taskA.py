@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from tensorflow.keras.models import Sequential
@@ -57,6 +58,39 @@ early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_wei
 
 # Model training
 history = model.fit(X_train, y_train, epochs=100, validation_split=0.2, callbacks=[early_stopping], batch_size=32)
+
+# Evaluate the model
+test_loss, test_acc = model.evaluate(X_test, y_test)
+print(f'Test Accuracy: {test_acc}, Test Loss: {test_loss}')
+
+# Model training
+history = model.fit(
+    X_train, y_train, epochs=100, validation_split=0.2,
+    callbacks=[early_stopping], batch_size=32
+)
+
+# Plotting the accuracy and loss graphs
+# Summarize history for accuracy
+plt.figure(figsize=(12, 6))
+plt.subplot(1, 2, 1)  # first plot
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('Model Accuracy')
+plt.ylabel('Accuracy')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Validation'], loc='upper left')
+
+# Summarize history for loss
+plt.subplot(1, 2, 2)  # second plot
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Model Loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Validation'], loc='upper left')
+
+plt.tight_layout()
+plt.show()
 
 # Evaluate the model
 test_loss, test_acc = model.evaluate(X_test, y_test)
