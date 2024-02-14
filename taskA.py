@@ -5,16 +5,18 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.callbacks import EarlyStopping
 
-# Load dataset
-df = pd.read_excel('CCD.xls')  
+df = pd.read_excel("/content/CCD (1).xls")
 
-# Assuming the last column is the target variable and the rest are features
-X = df.iloc[:, :-1]  # Features
-y = df.iloc[:, -1]   # Target variable
+# Convert all columns to numeric, coercing errors to NaN
+X = df.iloc[:, :-1].apply(pd.to_numeric, errors='coerce')
+y = df.iloc[:, -1]
 
-# Preprocess data
-# Handling missing values (simple fill with median, for example)
-X.fillna(X.median(), inplace=True)
+# Fill NaN values with the median of each column, only for numeric columns
+X.fillna(X.median(numeric_only=True), inplace=True)
+
+# Ensure all columns in X are numeric now
+if not all(X.dtypes.apply(lambda x: np.issubdtype(x, np.number))):
+    raise ValueError("Not all columns in the dataframe are numeric after conversion.")
 
 # Feature scaling
 scaler = StandardScaler()
