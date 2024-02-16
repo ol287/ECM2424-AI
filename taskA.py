@@ -4,10 +4,13 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
 # Assuming you've loaded the dataset into 'df'
+df = pd.read_excel("/CCD (2).xls")
 
 # Data preprocessing
 X = df.iloc[:, :-1].apply(pd.to_numeric, errors='coerce')
@@ -25,23 +28,29 @@ y_encoded = y_encoded.astype(np.float32)
 # Split the dataset
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
 
-# Model definition
+# Model definition with dropout and L2 regularization
 model = Sequential([
-    Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
-    Dense(64, activation='relu'),
+    Dense(64, activation='relu', input_shape=(X_train.shape[1],), kernel_regularizer=l2(0.001)),
+    Dropout(0.5),
+    BatchNormalization(),
+    Dense(64, activation='relu', kernel_regularizer=l2(0.001)),
+    Dropout(0.5),
+    BatchNormalization(),
     Dense(1, activation='sigmoid')
 ])
 
-# Model compilation
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+# Model compilation with a reduced initial learning rate
+optimizer = Adam(learning_rate=0.001)
+model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 
-# Early stopping callback
+# Callbacks for early stopping and learning rate reduction
 early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.0001)
 
-# Model training
+# Model training with callbacks
 history = model.fit(
     X_train, y_train, epochs=100, validation_split=0.2,
-    callbacks=[early_stopping], batch_size=32
+    callbacks=[early_stopping, reduce_lr], batch_size=32
 )
 
 # Plotting the accuracy and loss graphs
