@@ -1,78 +1,87 @@
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
-from tensorflow.keras.regularizers import l2
+from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.callbacks import EarlyStopping, LearningRateScheduler
+import numpy as np
 
-# Assuming you've loaded the dataset into 'df'
-df = pd.read_excel("/CCD (2).xls")
+#update file path before submitting
+data = pd.read_excel("/content/CCD (6).xls", skiprows=1)
+data.iloc[:, :-1] = data.iloc[:, :-1].apply(pd.to_numeric, errors='coerce')
 
-# Data preprocessing
-X = df.iloc[:, :-1].apply(pd.to_numeric, errors='coerce')
-y = df.iloc[:, -1].astype(str)  # Ensure target variable is string for LabelEncoder
+# Split the dataset into features and target variable
+X = data.drop('default payment next month', axis=1)
+y = data['default payment next month']
 
-X.fillna(X.median(numeric_only=True), inplace=True)
+# Split the data into training, validation, and test sets
+X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.4, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+
+# Normalize the features
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-X_scaled = X_scaled.astype(np.float32)
+X_train = scaler.fit_transform(X_train)
+X_val = scaler.transform(X_val)
+X_test = scaler.transform(X_test)
 
-encoder = LabelEncoder()
-y_encoded = encoder.fit_transform(y)
-y_encoded = y_encoded.astype(np.float32)
 
-# Split the dataset
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
+def build_model(n_layers=2, n_units=128, learning_rate=0.0001, dropout_rate=0.):
+    model = Sequential()
+    model.add(Dense(n_units, activation='relu', input_shape=(X_train.shape[1],)))
+    for _ in range(n_layers - 1):
+        model.add(Dense(n_units, activation='relu'))
+        model.add(Dropout(dropout_rate))
+    model.add(Dense(1, activation='sigmoid'))
 
-# Model definition with dropout and L2 regularization
-model = Sequential([
-    Dense(64, activation='relu', input_shape=(X_train.shape[1],), kernel_regularizer=l2(0.001)),
-    Dropout(0.5),
-    BatchNormalization(),
-    Dense(64, activation='relu', kernel_regularizer=l2(0.001)),
-    Dropout(0.5),
-    BatchNormalization(),
-    Dense(1, activation='sigmoid')
-])
+    model.compile(optimizer=Adam(learning_rate=learning_rate),
+                  loss='binary_crossentropy',
+                  metrics=['accuracy'])
+    return model
 
-# Model compilation with a reduced initial learning rate
-optimizer = Adam(learning_rate=0.001)
-model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+# Example hyperparameters
+n_layers = 2
+n_units = 64
+learning_rate = 0.001
+dropout_rate = 0.5
 
-# Callbacks for early stopping and learning rate reduction
+model = build_model(n_layers, n_units, learning_rate, dropout_rate)
+
+# Learning rate scheduler function
+def scheduler(epoch, lr):
+    if epoch < 10:
+        return lr
+    else:
+        return lr * np.exp(-0.1)
+
+lr_scheduler = LearningRateScheduler(scheduler)
+
 early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.0001)
 
-# Model training with callbacks
-history = model.fit(
-    X_train, y_train, epochs=100, validation_split=0.2,
-    callbacks=[early_stopping, reduce_lr], batch_size=32
-)
+history = model.fit(X_train, y_train, validation_data=(X_val, y_val),
+                    epochs=100, batch_size=32, verbose=1, callbacks=[early_stopping, lr_scheduler])
 
-# Plotting the accuracy and loss graphs
-plt.figure(figsize=(12, 6))
+# Evaluate the model
+test_loss, test_acc = model.evaluate(X_test, y_test, verbose=2)
+print(f'\nTest accuracy: {test_acc}, Test loss: {test_loss}')
+
+# Plotting training and validation accuracy
+plt.figure(figsize=(14, 7))
 plt.subplot(1, 2, 1)
-plt.plot(history.history['accuracy'])
-plt.plot(history.history['val_accuracy'])
-plt.title('Model Accuracy')
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training and Validation Accuracy')
+plt.xlabel('Epoch')
 plt.ylabel('Accuracy')
-plt.xlabel('Epoch')
-plt.legend(['Train', 'Validation'], loc='upper left')
+plt.legend()
 
+# Plotting training and validation loss
 plt.subplot(1, 2, 2)
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
-plt.title('Model Loss')
-plt.ylabel('Loss')
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss')
 plt.xlabel('Epoch')
-plt.legend(['Train', 'Validation'], loc='upper left')
-plt.tight_layout()
+plt.ylabel('Loss')
+plt.legend()
 plt.show()
-
-# Model evaluation
-test_loss, test_acc = model.evaluate(X_test, y_test)
-print(f'Test Accuracy: {test_acc}, Test Loss: {test_loss}')
